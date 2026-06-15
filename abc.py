@@ -3,13 +3,17 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+# =====================================
+# 페이지 설정
+# =====================================
+
 st.set_page_config(layout="wide")
 
 st.title("약물 전달 경로 시뮬레이션")
 
-# -------------------
+# =====================================
 # 사이드바
-# -------------------
+# =====================================
 
 st.sidebar.header("파라미터")
 
@@ -17,6 +21,8 @@ vessel_type = st.sidebar.selectbox(
     "혈관 구조",
     ["직선형", "곡선형", "분기형"]
 )
+
+# 공통 파라미터
 
 r = st.sidebar.slider(
     "혈관 반지름 r",
@@ -34,30 +40,48 @@ eta = st.sidebar.slider(
     0.1
 )
 
-a = st.sidebar.slider(
-    "곡률 a",
-    0.0,
-    0.5,
-    0.1,
-    0.01
-)
+# 사용 여부(Boolean)
 
-theta_deg = st.sidebar.slider(
-    "분기각 θ",
-    10,
-    120,
-    60
-)
+show_curvature = (vessel_type == "곡선형")
+show_branch_angle = (vessel_type == "분기형")
 
-# -------------------
-# 공통
-# -------------------
+# 기본값
+
+a = 0.1
+theta_deg = 60
+
+# 곡선형 전용
+
+if show_curvature:
+
+    a = st.sidebar.slider(
+        "곡률 a",
+        0.0,
+        0.5,
+        0.1,
+        0.01
+    )
+
+# 분기형 전용
+
+if show_branch_angle:
+
+    theta_deg = st.sidebar.slider(
+        "분기각 θ",
+        10,
+        120,
+        60
+    )
+
+# =====================================
+# 공통 설정
+# =====================================
 
 g = np.array([1, 0])
 
-# -------------------
+# =====================================
 # 직선형
-# -------------------
+# =====================================
 
 if vessel_type == "직선형":
 
@@ -68,24 +92,26 @@ if vessel_type == "직선형":
 
     L = np.linalg.norm(v)
 
-    A_score = np.dot(v, g) / (
-        np.linalg.norm(v) * np.linalg.norm(g)
+    A_score = (
+        np.dot(v, g)
+        /
+        (np.linalg.norm(v) * np.linalg.norm(g))
     )
 
-    D_score = 1
+    D_score = 1.0
 
     x = [0, 10]
     y = [0, 0]
 
-# -------------------
+# =====================================
 # 곡선형
-# -------------------
+# =====================================
 
 elif vessel_type == "곡선형":
 
     x_curve = np.linspace(0, 10, 100)
 
-    y_curve = a * (x_curve - 5)**2
+    y_curve = a * (x_curve - 5) ** 2
 
     vecs = np.column_stack([
         np.diff(x_curve),
@@ -93,16 +119,15 @@ elif vessel_type == "곡선형":
     ])
 
     cosines = []
-
     lengths = []
 
     for vec in vecs:
 
-        c = np.dot(vec, g) / (
+        cosines.append(
+            np.dot(vec, g)
+            /
             np.linalg.norm(vec)
         )
-
-        cosines.append(c)
 
         lengths.append(
             np.linalg.norm(vec)
@@ -112,16 +137,18 @@ elif vessel_type == "곡선형":
 
     L = np.sum(lengths)
 
-    D_score = 1 + (
-        max(y_curve) - min(y_curve)
-    ) / 10
+    D_score = (
+        1
+        +
+        (max(y_curve) - min(y_curve)) / 10
+    )
 
     x = x_curve
     y = y_curve
 
-# -------------------
+# =====================================
 # 분기형
-# -------------------
+# =====================================
 
 else:
 
@@ -130,30 +157,34 @@ else:
     S = np.array([0, -4])
     C = np.array([5, -4])
 
-    B1 = C + 5*np.array([
-        np.cos(theta/2),
-        np.sin(theta/2)
+    B1 = C + 5 * np.array([
+        np.cos(theta / 2),
+        np.sin(theta / 2)
     ])
 
-    B2 = C + 5*np.array([
-        np.cos(theta/2),
-        -np.sin(theta/2)
+    B2 = C + 5 * np.array([
+        np.cos(theta / 2),
+        -np.sin(theta / 2)
     ])
 
     v = B1 - C
 
-    A_score = np.dot(v, g) / (
+    A_score = (
+        np.dot(v, g)
+        /
         np.linalg.norm(v)
     )
 
-    D_score = 1 + (
-        np.linalg.norm(B1 - B2)
-    ) / 10
+    D_score = (
+        1
+        +
+        np.linalg.norm(B1 - B2) / 10
+    )
 
     L = (
-        np.linalg.norm(C-S)
+        np.linalg.norm(C - S)
         +
-        np.linalg.norm(B1-C)
+        np.linalg.norm(B1 - C)
     )
 
     x = [
@@ -168,21 +199,25 @@ else:
         C[1], B2[1]
     ]
 
-# -------------------
-# 푸아죄유
-# -------------------
+# =====================================
+# 푸아죄유 기반 유량
+# =====================================
 
-Q = np.pi * r**4 / (
-    8 * eta * L
+Q = (
+    np.pi * r**4
+    /
+    (8 * eta * L)
 )
+
+# 전달 효율
 
 E = Q * A_score * D_score
 
-# -------------------
-# 결과
-# -------------------
+# =====================================
+# 결과 표시
+# =====================================
 
-col1, col2 = st.columns([2,1])
+col1, col2 = st.columns([2, 1])
 
 with col1:
 
@@ -216,18 +251,15 @@ with col1:
 with col2:
 
     st.metric("유량 Q", f"{Q:.4f}")
-
     st.metric("방향성 A", f"{A_score:.4f}")
-
     st.metric("분포성 D", f"{D_score:.4f}")
-
     st.metric("전달효율 E", f"{E:.4f}")
 
-# -------------------
+# =====================================
 # 민감도 분석
-# -------------------
+# =====================================
 
-st.header("반지름 변화에 따른 효율")
+st.header("반지름 변화에 따른 전달효율")
 
 r_values = np.linspace(
     0.5,
@@ -239,8 +271,10 @@ E_values = []
 
 for rr in r_values:
 
-    QQ = np.pi * rr**4 / (
-        8 * eta * L
+    QQ = (
+        np.pi * rr**4
+        /
+        (8 * eta * L)
     )
 
     EE = QQ * A_score * D_score
@@ -259,7 +293,7 @@ fig2.add_trace(
 
 fig2.update_layout(
     xaxis_title="반지름 r",
-    yaxis_title="효율 E",
+    yaxis_title="전달효율 E",
     height=500
 )
 
@@ -268,15 +302,20 @@ st.plotly_chart(
     use_container_width=True
 )
 
-# -------------------
+# =====================================
 # 데이터 테이블
-# -------------------
+# =====================================
 
 df = pd.DataFrame({
-    "Q":[Q],
-    "A":[A_score],
-    "D":[D_score],
-    "E":[E]
+    "Q": [Q],
+    "A": [A_score],
+    "D": [D_score],
+    "E": [E]
 })
 
-st.dataframe(df)
+st.subheader("계산 결과")
+
+st.dataframe(
+    df,
+    use_container_width=True
+)
